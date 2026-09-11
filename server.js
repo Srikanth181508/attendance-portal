@@ -87,8 +87,17 @@ function parseTimetableText(rawText) {
 
 // 1. MySQL Connection Pool (Credentials via Environment Variable - GitHub Safe)
 const DATABASE_URL = process.env.DATABASE_URL || 'mysql://root:@localhost:3306/attendance_db';
+const parsedDbUrl = new URL(DATABASE_URL);
 const db = mysql.createPool({
-  uri: DATABASE_URL,
+  host: parsedDbUrl.hostname,
+  port: Number(parsedDbUrl.port) || 4000,
+  user: decodeURIComponent(parsedDbUrl.username),
+  password: decodeURIComponent(parsedDbUrl.password),
+  database: parsedDbUrl.pathname.replace(/^\//, '') || 'test',
+  ssl: {
+    minVersion: 'TLSv1.2',
+    rejectUnauthorized: true
+  },
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
