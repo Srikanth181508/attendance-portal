@@ -1,0 +1,19 @@
+{
+  "name": "gridline-it-console",
+  "version": "1.0.0",
+  "description": "GRIDLINE IT Department Console",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.22.2",
+    "multer": "^1.4.5-lts.2",
+    "mysql2": "^3.24.2",
+    "nodemailer": "^9.0.6",
+    "pdf-parse": "^2.4.5",
+    "resend": "^6.26.0",
+    "twilio": "^6.1.0"
+  }
+}

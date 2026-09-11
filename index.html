@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DEPARTMENT ATTENDANCE CONSOLE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Department & Year Selection Styles */
+    .portal-container {
+      max-width: 860px;
+      margin: 20px auto;
+      padding: 10px;
+      text-align: center;
+    }
+    .portal-heading {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 24px;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+    .portal-subheading {
+      color: #64748b;
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .dept-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .dept-card {
+      background: #ffffff;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 32px 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      transition: all 0.2s ease-in-out;
+      text-align: left;
+    }
+    .dept-card:hover {
+      transform: translateY(-4px);
+      border-color: #2563eb;
+      box-shadow: 0 10px 18px -3px rgba(37, 99, 235, 0.15);
+    }
+    .dept-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #eff6ff;
+      color: #2563eb;
+      margin-bottom: 12px;
+    }
+    .dept-card h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      margin: 0 0 6px 0;
+      font-size: 22px;
+      color: #1e293b;
+    }
+    .dept-card p {
+      margin: 0;
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.4;
+    }
+    .year-selection-wrapper {
+      animation: fadeIn 0.25s ease-in-out;
+      margin-top: 15px;
+    }
+    .year-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    .btn-back {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      color: #334155;
+    }
+    .btn-back:hover {
+      background: #e2e8f0;
+    }
+    .year-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      color: #0f172a;
+      margin: 0;
+    }
+    .year-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .year-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 24px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .year-card:hover {
+      background: #1e3a8a;
+      border-color: #1e3a8a;
+      color: #ffffff;
+      transform: translateY(-2px);
+    }
+    .year-card:hover .year-number,
+    .year-card:hover .year-tag {
+      color: #ffffff;
+    }
+    .year-number {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+    .year-tag {
+      font-size: 12px;
+      color: #64748b;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-veil"></div>
+  <div class="app">
+    <!-- Topbar Navigation -->
+    <header class="topbar">
+      <div class="brand" onclick="location.reload()" style="cursor: pointer;">
+        <div class="brand-mark">G</div>
+        <div>
+          <div class="brand-text">DEPARTMENT ATTENDANCE</div>
+          <div class="brand-sub" id="brandSub">MULTI-DEPT ATTENDANCE CONSOLE</div>
+        </div>
+      </div>
+      <div class="crumbs" id="crumbs"></div>
+      <div class="topbar-right" id="topbarRight">
+        <!-- Action Buttons inject aagum -->
+      </div>
+    </header>
+
+    <!-- Main Dynamic Application Screen -->
+    <main>
+      <div class="stage">
+        <div class="view" id="view">
+          <!-- Step 1 & 2: Department & Year Selection Portal -->
+          <div class="portal-container" id="portalSelectView">
+            
+            <!-- Department Grid -->
+            <div id="deptPicker">
+              <h2 class="portal-heading">Select Academic Department</h2>
+              <p class="portal-subheading">Choose department to record period attendance or access reports</p>
+              
+              <div class="dept-grid">
+                <!-- AI & DS Department Card -->
+                <div class="dept-card" onclick="onSelectDepartment('aids', 'AI & DS (Artificial Intelligence & Data Science)')">
+                  <span class="dept-badge">FACULTY OF COMPUTING</span>
+                  <h3>AI & DS</h3>
+                  <p>Artificial Intelligence & Data Science</p>
+                </div>
+
+                <!-- IT Department Card -->
+                <div class="dept-card" onclick="onSelectDepartment('it', 'Information Technology')">
+                  <span class="dept-badge">FACULTY OF COMPUTING</span>
+                  <h3>Information Technology</h3>
+                  <p>Department of Information Technology</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Year Grid (Hidden by Default) -->
+            <div id="yearPicker" class="year-selection-wrapper" style="display: none;">
+              <div class="year-header">
+                <button class="btn-back" onclick="onBackToDepartments()">← Back to Departments</button>
+                <h3 class="year-title" id="activeDeptLabel">Selected Department</h3>
+                <div style="width: 80px;"></div>
+              </div>
+
+              <div class="year-grid">
+                <div class="year-card" onclick="onSelectYear(1)">
+                  <span class="year-number">1st Year</span>
+                  <span class="year-tag">Semester 1 & 2</span>
+                </div>
+                <div class="year-card" onclick="onSelectYear(2)">
+                  <span class="year-number">2nd Year</span>
+                  <span class="year-tag">Semester 3 & 4</span>
+                </div>
+                <div class="year-card" onclick="onSelectYear(3)">
+                  <span class="year-number">3rd Year</span>
+                  <span class="year-tag">Semester 5 & 6</span>
+                </div>
+                <div class="year-card" onclick="onSelectYear(4)">
+                  <span class="year-number">4th Year</span>
+                  <span class="year-tag">Semester 7 & 8</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <!-- Dynamic views (Staff Login, Attendance Sheet) load aagum -->
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+      SHARED DATA · TIMETABLES & ATTENDANCE STORED IN TIDB CLOUD ARE CENTRALIZED & MONITORED
+    </footer>
+  </div>
+
+  <!-- Toast Notification Bar -->
+  <div class="toast" id="toast">
+    <span class="dot"></span>
+    <span id="toastMsg"></span>
+  </div>
+
+  <!-- OD Remarks / Details Modal Popup -->
+  <div class="modal-backdrop" id="odModal" style="display: none;">
+    <div class="modal-card">
+      <h3 style="margin-top: 0; font-family: 'Space Grotesk', sans-serif;">Enter OD Reason / Details</h3>
+      <input type="text" id="odReasonInput" placeholder="e.g. Sports, Symposium, Placement Drive" class="form-input" style="width: 100%; padding: 10px; margin: 12px 0; border-radius: 6px; box-sizing: border-box;" />
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button id="cancelOdBtn" class="btn btn-secondary">Cancel</button>
+        <button id="confirmOdBtn" class="btn btn-primary">Confirm OD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inline Helper Scripts for Department Navigation -->
+  <script>
+    let selectedDepartment = '';
+
+    function onSelectDepartment(deptKey, deptName) {
+      selectedDepartment = deptKey;
+      document.getElementById('deptPicker').style.display = 'none';
+      document.getElementById('yearPicker').style.display = 'block';
+      document.getElementById('activeDeptLabel').innerText = deptName;
+      document.getElementById('brandSub').innerText = `${deptKey.toUpperCase()} DEPT · ATTENDANCE CONSOLE`;
+    }
+
+    function onBackToDepartments() {
+      selectedDepartment = '';
+      document.getElementById('yearPicker').style.display = 'none';
+      document.getElementById('deptPicker').style.display = 'block';
+      document.getElementById('brandSub').innerText = 'MULTI-DEPT ATTENDANCE CONSOLE';
+    }
+
+    function onSelectYear(yearNum) {
+      const targetYearKey = `${selectedDepartment}_year${yearNum}`;
+      
+      // Unga app.js router illana loadYear function call seiyum:
+      if (typeof window.loadYearView === 'function') {
+        window.loadYearView(targetYearKey, yearNum, selectedDepartment);
+      } else if (typeof window.switchYear === 'function') {
+        window.switchYear(targetYearKey);
+      } else {
+        console.log("Selected Target:", targetYearKey);
+      }
+    }
+  </script>
+
+  <script src="/app.js?v=2.1"></script>
+</body>
+</html>

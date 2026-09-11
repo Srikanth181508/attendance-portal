@@ -1,0 +1,251 @@
+{
+  "timetables": {
+    "year4": [
+      {
+        "day": "Mon",
+        "periods": [
+          {
+            "subject": "PT",
+            "staff": "PN"
+          },
+          {
+            "subject": "ITAS",
+            "staff": "SS"
+          },
+          {
+            "subject": "POM",
+            "staff": "TS"
+          },
+          {
+            "subject": "PT",
+            "staff": "ER"
+          },
+          {
+            "subject": "HVE",
+            "staff": "DV"
+          },
+          {
+            "subject": "PT",
+            "staff": ""
+          }
+        ]
+      },
+      {
+        "day": "Tue",
+        "periods": [
+          {
+            "subject": "ITAS",
+            "staff": "SS"
+          },
+          {
+            "subject": "POM",
+            "staff": "TS"
+          },
+          {
+            "subject": "HVE",
+            "staff": "DV"
+          },
+          {
+            "subject": "PT",
+            "staff": "ER"
+          },
+          {
+            "subject": "PT",
+            "staff": ""
+          },
+          {
+            "subject": "PT",
+            "staff": "MC"
+          }
+        ]
+      },
+      {
+        "day": "Wed",
+        "periods": [
+          {
+            "subject": "IM",
+            "staff": "BS"
+          },
+          {
+            "subject": "PRW",
+            "staff": "RL"
+          },
+          {
+            "subject": "MENTOR",
+            "staff": "ER"
+          },
+          {
+            "subject": "PT",
+            "staff": ""
+          },
+          {
+            "subject": "ITAS",
+            "staff": "SS"
+          },
+          {
+            "subject": "LIBRARY",
+            "staff": "ER"
+          }
+        ]
+      },
+      {
+        "day": "Thu",
+        "periods": [
+          {
+            "subject": "PT",
+            "staff": ""
+          },
+          {
+            "subject": "POM",
+            "staff": "TS"
+          },
+          {
+            "subject": "PT",
+            "staff": "MC"
+          },
+          {
+            "subject": "ITAS",
+            "staff": "SS"
+          },
+          {
+            "subject": "IM",
+            "staff": "BS"
+          },
+          {
+            "subject": "HVE",
+            "staff": "DV"
+          }
+        ]
+      },
+      {
+        "day": "Fri",
+        "periods": [
+          {
+            "subject": "HVE",
+            "staff": "DV"
+          },
+          {
+            "subject": "PRW",
+            "staff": "RL"
+          },
+          {
+            "subject": "PT",
+            "staff": ""
+          },
+          {
+            "subject": "ITAS",
+            "staff": "SS"
+          },
+          {
+            "subject": "IM",
+            "staff": "BS"
+          },
+          {
+            "subject": "HVE",
+            "staff": "DV"
+          }
+        ]
+      },
+      {
+        "day": "Sat",
+        "periods": [
+          {
+            "subject": "POM",
+            "staff": "TS"
+          },
+          {
+            "subject": "PRW",
+            "staff": "RL"
+          },
+          {
+            "subject": "SPORTS",
+            "staff": "PN"
+          },
+          {
+            "subject": "",
+            "staff": ""
+          },
+          {
+            "subject": "",
+            "staff": ""
+          },
+          {
+            "subject": "",
+            "staff": ""
+          }
+        ]
+      }
+    ]
+  },
+  "pdfs": {
+    "year4": {
+      "originalName": "DocScanner 31-Aug-2026 12-21 PM.pdf",
+      "filename": "timetable-year4-1788165744926-DocScanner_31_Aug_2026_12_21_PM.pdf",
+      "url": "/uploads/timetable-year4-1788165744926-DocScanner_31_Aug_2026_12_21_PM.pdf",
+      "uploadedAt": "2026-08-31T08:42:24.954Z"
+    }
+  },
+  "attendances": {
+    "attendance:year4:2026-08-31:P4": {
+      "day": "Mon",
+      "period": 4,
+      "subject": "PT",
+      "staff": "ER",
+      "date": "2026-08-31",
+      "records": {
+        "621823205001": "present",
+        "621823205002": "present",
+        "621823205003": "absent",
+        "621823205004": "present",
+        "621823205005": "absent",
+        "621823205006": "absent",
+        "621823205007": "absent",
+        "621823205008": "present",
+        "621823205009": "present",
+        "621823205011": "present",
+        "621823205012": "present",
+        "621823205014": "present",
+        "621823205016": "present",
+        "621823205018": "present",
+        "621823205019": "present",
+        "621823205020": "present",
+        "621823205021": "present",
+        "621823205022": "present",
+        "621823205023": "absent",
+        "621823205024": "present",
+        "621823205025": "present",
+        "621823205026": "absent",
+        "621823205027": "present",
+        "621823205028": "present",
+        "621823205029": "present",
+        "621823205030": "present",
+        "621823205031": "present",
+        "621823205033": "present",
+        "621823205035": "present",
+        "621823205036": "present",
+        "621823205037": "present",
+        "621823205038": "present",
+        "621823205039": "absent",
+        "621823205040": "absent",
+        "621823205041": "present",
+        "621823205042": "present",
+        "621823205043": "present",
+        "621823205044": "present",
+        "621823205047": "present",
+        "621823205048": "absent",
+        "621823205049": "present",
+        "621823205051": "present",
+        "621823205053": "present",
+        "621823205071": "present"
+      },
+      "savedAt": "2026-08-31T08:48:03.410Z"
+    }
+  },
+  "staffAuth": {
+    "er": "1234",
+    "pn": "1234",
+    "dv": "1234",
+    "mc": "1234",
+    "ts": "1234"
+  }
+}
