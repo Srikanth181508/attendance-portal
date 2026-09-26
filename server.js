@@ -108,6 +108,11 @@ const db = mysql.createPool({
 
 // 2. Email Configuration (Secure HTTPS API via Resend - GitHub Safe)
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+const EMAIL_RECIPIENTS = (process.env.EMAIL_RECIPIENTS || process.env.ADMIN_EMAIL || 'itaids2327@gmail.com')
+  .split(',')
+  .map(v => v.trim())
+  .filter(Boolean);
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 // Helper: Parse Students Status List
@@ -167,6 +172,11 @@ async function sendAttendanceEmail(yearKey, dateStr, periodIdx, presentList, abs
     return;
   }
 
+  if (!EMAIL_RECIPIENTS.length) {
+    console.warn('⚠️ No email recipients configured. Skipping email notification.');
+    return;
+  }
+
   const { dept, deptShort, year } = getDisplayTitle(yearKey);
 
   try {
@@ -210,20 +220,22 @@ async function sendAttendanceEmail(yearKey, dateStr, periodIdx, presentList, abs
       </div>
     `;
 
-    const { data, error } = await resend.emails.send({
-      from: 'Attendance Portal <onboarding@resend.dev>',
-      to: 'itaids2327@gmail.com',
+    const payload = {
+      from: `Attendance Portal <${RESEND_FROM_EMAIL}>`,
+      to: EMAIL_RECIPIENTS,
       subject: `Attendance Report | ${deptShort} ${year} | Date: ${dateStr} | Period: ${periodIdx + 1}`,
       html: htmlContent
-    });
+    };
+
+    const { data, error } = await resend.emails.send(payload);
 
     if (error) {
-      console.error('📧 Resend API Error:', error.message);
+      console.error('📧 Resend API Error:', error.message || JSON.stringify(error));
     } else {
       console.log('📧 Attendance Email sent successfully via Secure HTTPS API! ID:', data.id);
     }
   } catch (err) {
-    console.error('📧 Resend Exception:', err.message);
+    console.error('📧 Resend Exception:', err && err.message ? err.message : err);
   }
 }
 
@@ -543,7 +555,7 @@ app.post(['/api/attendance/:year', '/api/attendance/:year/'], async (req, res) =
     );
 
     const { presentList, absentList, odList } = parseAttendancePayload(payload);
-    sendAttendanceEmail(yearKey, dateStr, periodIdx, presentList, absentList, odList);
+    await sendAttendanceEmail(yearKey, dateStr, periodIdx, presentList, absentList, odList);
 
     res.json({ success: true, message: 'Attendance saved and email report sent!' });
   } catch (err) { 
