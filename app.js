@@ -3,10 +3,10 @@ const PERIOD_TIMES = ['9:30–10:30', '10:30–11:25', '11:35–12:30', '1:30–
 const NUM_PERIODS = 6;
 
 // Empty string sets API root dynamically for both Render and Localhost
-// Auto-detect: Live Server (5500) வழியாகத் திறந்தாலும் Port 3000 Node சர்வருக்கு அனுப்பும்
 const API_BASE = (window.location.port && window.location.port !== '3000' && !window.location.hostname.includes('render.com') && !window.location.hostname.includes('ngrok'))
   ? 'http://localhost:3000'
   : '';
+
 // Helper to bypass browser warning on standard JSON fetch requests
 async function secureFetch(url, options = {}) {
   const headers = {
@@ -21,7 +21,8 @@ let state = {
   role: null, // 'admin' | 'it' | 'advisor'
   dept: 'aids', // 'aids' | 'it'
   year: null,
-  currentStaff: null
+  currentStaff: null,
+  saturdayDayOrder: 'Mon'
 };
 
 const AVAILABLE_YEARS = [1, 2, 3, 4];
@@ -64,78 +65,17 @@ function showToast(msg) {
   window._toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
-// ---------------- EXCEL EXPORT HELPERS (SheetJS) ---------------- //
+// ---------------- EXCEL EXPORT HELPERS (SheetJS & Direct Stream) ---------------- //
 function exportDailyToExcel(dept, year, date, studentList, studentMap) {
-  if (typeof XLSX === 'undefined') {
-    return showToast('SheetJS library not loaded.');
-  }
-  if (!studentList || studentList.length === 0) {
-    return showToast('No student records available to export.');
-  }
-
-  const wsData = [
-    [`${getDeptLabel(dept)} - Year ${year} - Daily Attendance Report`],
-    [`Date: ${date}`],
-    [],
-    ['Sl', 'Student Name', 'Reg No', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6']
-  ];
-
-  studentList.forEach((s, idx) => {
-    wsData.push([
-      idx + 1,
-      s.name,
-      s.reg,
-      studentMap[s.reg]?.periods['P1'] || '-',
-      studentMap[s.reg]?.periods['P2'] || '-',
-      studentMap[s.reg]?.periods['P3'] || '-',
-      studentMap[s.reg]?.periods['P4'] || '-',
-      studentMap[s.reg]?.periods['P5'] || '-',
-      studentMap[s.reg]?.periods['P6'] || '-'
-    ]);
-  });
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  ws['!cols'] = [{ wch: 6 }, { wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, ws, `Daily_${date}`);
-  XLSX.writeFile(wb, `${getDeptShort(dept)}_Year${year}_Daily_Attendance_${date}.xlsx`);
-  showToast('Daily Attendance Excel downloaded!');
+  const targetKey = getYearKey(dept, year);
+  window.location.href = `${API_BASE}/api/attendance/export-daily/${targetKey}?date=${date}`;
+  showToast('Downloading Daily Attendance Excel…');
 }
 
 function exportMonthlyToExcel(dept, year, monthVal, list) {
-  if (typeof XLSX === 'undefined') {
-    return showToast('SheetJS library not loaded.');
-  }
-  if (!list || list.length === 0) {
-    return showToast('No data available to export.');
-  }
-
-  const wsData = [
-    [`${getDeptLabel(dept)} - Year ${year} - Monthly Cumulative Attendance Report`],
-    [`Month: ${monthVal}`],
-    [],
-    ['Sl', 'Student Name', 'Total Hours', 'Present', 'OD', 'Absent', 'Cumulative %', 'Eligibility (<75%)']
-  ];
-
-  list.forEach((st, idx) => {
-    wsData.push([
-      idx + 1,
-      st.studentName,
-      st.totalPeriods,
-      st.present,
-      st.od,
-      st.absent,
-      `${st.percentage}%`,
-      st.isShortage ? 'Shortage (<75%)' : 'Eligible'
-    ]);
-  });
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  ws['!cols'] = [{ wch: 6 }, { wch: 25 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, ws, `Monthly_${monthVal}`);
-  XLSX.writeFile(wb, `${getDeptShort(dept)}_Year${year}_Cumulative_Report_${monthVal}.xlsx`);
-  showToast('Monthly Cumulative Excel downloaded!');
+  const targetKey = getYearKey(dept, year);
+  window.location.href = `${API_BASE}/api/attendance/export-monthly/${targetKey}?month=${monthVal}`;
+  showToast('Downloading Monthly Cumulative Excel…');
 }
 
 // ---------------- API CALLS ---------------- //
@@ -155,25 +95,16 @@ async function saveTimetable(grid, year = state.year, dept = state.dept) {
   try {
     const res = await secureFetch(`${API_BASE}/api/timetable/${targetKey}`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json' 
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(grid)
     });
-    
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('Save Timetable Server Error:', errText);
-      return false;
-    }
-    return true;
+    return res.ok;
   } catch (e) {
     console.error('Save Timetable Fetch Error:', e);
     return false;
   }
 }
 
-// Fixed FormData fetch: lets the browser auto-set multipart boundary
 async function uploadPdf(file, year = state.year, dept = state.dept) {
   const targetKey = getYearKey(dept, year);
   try {
@@ -182,9 +113,7 @@ async function uploadPdf(file, year = state.year, dept = state.dept) {
     
     const res = await fetch(`${API_BASE}/api/timetable/pdf/${targetKey}`, {
       method: 'POST',
-      headers: {
-        'ngrok-skip-browser-warning': 'true'
-      },
+      headers: { 'ngrok-skip-browser-warning': 'true' },
       body: formData
     });
 
@@ -228,7 +157,6 @@ async function saveYearStudents(studentsList, year = state.year, dept = state.de
   }
 }
 
-// Fixed FormData fetch for Student Namelist PDF
 async function uploadStudentPdf(file, year = state.year, dept = state.dept) {
   const targetKey = getYearKey(dept, year);
   try {
@@ -237,9 +165,7 @@ async function uploadStudentPdf(file, year = state.year, dept = state.dept) {
 
     const res = await fetch(`${API_BASE}/api/students/pdf/${targetKey}`, {
       method: 'POST',
-      headers: {
-        'ngrok-skip-browser-warning': 'true'
-      },
+      headers: { 'ngrok-skip-browser-warning': 'true' },
       body: formData
     });
 
@@ -295,9 +221,10 @@ async function saveAttendance(dateStr, periodIdx, payload, year = state.year, de
 function todayInfo() {
   const now = new Date();
   const jsDay = now.getDay();
+  const isSaturday = jsDay === 6;
   const dayName = jsDay === 0 ? null : DAYS[jsDay - 1];
   const dateStr = now.toISOString().slice(0, 10);
-  return { now, dayName, dateStr };
+  return { now, jsDay, isSaturday, dayName, dateStr };
 }
 
 function parsePeriodRange(str) {
@@ -344,13 +271,18 @@ function setCrumbs() {
   if (state.year) parts.push('Year ' + state.year);
   if (state.currentStaff) parts.push(state.currentStaff);
 
-  document.getElementById('crumbs').innerHTML = parts.length
-    ? parts.map((p, i) => (i > 0 ? '<span>/</span>' : '') + '<b>' + p + '</b>').join(' ')
-    : '';
+  const crumbsEl = document.getElementById('crumbs');
+  if (crumbsEl) {
+    crumbsEl.innerHTML = parts.length
+      ? parts.map((p, i) => (i > 0 ? '<span>/</span>' : '') + '<b>' + p + '</b>').join(' ')
+      : '';
+  }
   const right = document.getElementById('topbarRight');
-  right.innerHTML = state.view !== 'login'
-    ? '<button class="btn-ghost" onclick="goBack()">← Back</button><button class="btn-ghost" onclick="logout()">Logout</button>'
-    : '';
+  if (right) {
+    right.innerHTML = state.view !== 'login'
+      ? '<button class="btn-ghost" onclick="goBack()">← Back</button><button class="btn-ghost" onclick="logout()">Logout</button>'
+      : '';
+  }
 }
 
 function goBack() {
@@ -387,13 +319,29 @@ function goBack() {
 }
 
 function logout() {
-  state = { view: 'login', role: null, dept: 'aids', year: null, currentStaff: null };
+  state = { view: 'login', role: null, dept: 'aids', year: null, currentStaff: null, saturdayDayOrder: 'Mon' };
   render();
 }
 
+// Global hook for index.html helper functions
+window.loadYearView = function(targetKey, yearNum, deptKey) {
+  state.dept = deptKey || 'aids';
+  state.year = parseInt(yearNum) || 1;
+  state.view = state.role === 'admin' ? 'admin' : (state.role === 'advisor' ? 'advisorDashboard' : 'staffSelect');
+  render();
+};
+
 function render() {
   setCrumbs();
+  
+  // Clean up static portal elements if present in index.html
+  const portalView = document.getElementById('portalSelectView');
+  if (portalView) {
+    portalView.remove();
+  }
+
   const el = document.getElementById('view');
+  if (!el) return;
   el.classList.remove('view');
   void el.offsetWidth;
   el.classList.add('view');
@@ -452,7 +400,6 @@ function renderYearSelect(el) {
     <h1 class="title">Select Department & Year</h1>
     <p class="lede">Choose your academic department to expand and select your class year.</p>
     
-    <!-- DEPARTMENT CARDS GRID -->
     <div class="choice-grid cols-2" id="deptSelectorGrid">
       <div class="tilt-card ${state.dept === 'aids' ? 'active-dept-card' : ''}" data-dept="aids" style="border-top: 4px solid var(--cyan, #06b6d4);">
         <span class="tag">DEPT 01</span>
@@ -471,7 +418,6 @@ function renderYearSelect(el) {
       </div>
     </div>
 
-    <!-- EXPANDABLE YEARS BOX GRID -->
     <div class="panel" id="yearBoxContainer" style="margin-top: 25px; display: block;">
       <div class="panel-head" style="margin-bottom: 15px;">
         <div style="font-weight:700; font-family:'Space Grotesk',sans-serif;" id="yearHeaderLabel">
@@ -586,7 +532,6 @@ function renderAdvisorDashboard(el) {
       </div>
     </div>
 
-    <!-- DAILY ATTENDANCE TAB -->
     <div class="panel" id="advisorDailyPanel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
@@ -603,7 +548,6 @@ function renderAdvisorDashboard(el) {
       </div>
     </div>
 
-    <!-- MONTHLY CUMULATIVE TAB -->
     <div class="panel" id="advisorMonthlyPanel" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
@@ -716,12 +660,11 @@ async function loadAdvisorDailyData() {
               <tr>
                 <td style="color:var(--text-dimmer); font-family:'JetBrains Mono';">${String(idx + 1).padStart(2, '0')}</td>
                 <td style="font-weight:600; color:var(--text);">${s.name}</td>
-                <td style="font-family:'JetBrains Mono'; font-size:12px; color:var(--text-dim);">${s.reg}</td>
-                ${Array.from({ length: NUM_PERIODS }, (_, i) => {
+                <td style="font-family:'JetBrains Mono'; font-size:12px; color:var(--text-dim);">${s.reg}</td>${Array.from({ length: NUM_PERIODS }, (_, i) => {
                   const st = studentMap[s.reg]?.periods[`P${i + 1}`] || '-';
                   let color = 'var(--text-dimmer)';
-                  if (st === 'PRESENT') color = 'var(--emerald, #22c55e)';
-                  else if (st === 'ABSENT') color = 'var(--rose, #ef4444)';
+                  if (st === 'PRESENT' || st === 'P') color = 'var(--emerald, #22c55e)';
+                  else if (st === 'ABSENT' || st === 'A') color = 'var(--rose, #ef4444)';
                   else if (st === 'OD') color = 'var(--amber, #f97316)';
                   return `<td style="text-align:center; font-weight:700; color:${color}; font-family:'JetBrains Mono';">${st}</td>`;
                 }).join('')}
@@ -842,7 +785,7 @@ async function renderStaffSelect(el) {
       <div class="panel">
         <div class="empty-state">
           <div class="glyph">👨‍🏫</div>
-          <h3>No Faculty Mapped for ${getDeptShort()} Year ${state.year}</h3>
+          <h3>No Faculty Mapped for ${getDeptShort()} Year${state.year}</h3>
           <p>Please contact admin to upload timetable slots and assign staff members.</p>
           <button class="btn-solid" onclick="state.view='year'; render();">Back to Years</button>
         </div>
@@ -968,7 +911,7 @@ async function openStaffAuthModal(staffName) {
   cancelBtn.onclick = () => document.getElementById('authModal').remove();
 }
 
-/* 6. ATTENDANCE SHEET & LIVE MARKING */
+/* 6. ATTENDANCE SHEET & LIVE MARKING (WITH AUTO DAY & SATURDAY SELECTOR) */
 async function renderAttendance(el) {
   el.innerHTML = `<div class="panel"><div class="empty-state"><div class="glyph">⟳</div><p>Loading Attendance Console…</p></div></div>`;
   
@@ -986,12 +929,13 @@ async function renderAttendance(el) {
     return;
   }
 
-  const { dayName, dateStr } = todayInfo();
-  const activeDay = dayName || 'Mon';
-  buildAttendanceUI(el, tt, classStudents, activeDay, dateStr, !dayName);
+  const { isSaturday, dayName, dateStr } = todayInfo();
+  let activeDay = isSaturday ? state.saturdayDayOrder : (dayName || 'Mon');
+
+  buildAttendanceUI(el, tt, classStudents, activeDay, dateStr, isSaturday);
 }
 
-async function buildAttendanceUI(el, tt, classStudents, activeDay, dateStr, isFallbackDay) {
+async function buildAttendanceUI(el, tt, classStudents, activeDay, dateStr, isSaturday) {
   const dayRow = tt.find(d => d.day === activeDay);
   const periods = dayRow ? dayRow.periods : [];
   const nowMins = (() => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); })();
@@ -1008,14 +952,41 @@ async function buildAttendanceUI(el, tt, classStudents, activeDay, dateStr, isFa
   }
   if (currentIdx === -1) currentIdx = 0;
 
+  const saturdayBoxHtml = isSaturday ? `
+    <div style="background: rgba(79, 216, 255, 0.08); border: 1px solid var(--cyan); padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 18px;">⚠️</span>
+        <div>
+          <div style="font-family: 'Space Grotesk', sans-serif; font-size: 13.5px; font-weight: 700; color: var(--cyan);">Saturday Working Day</div>
+          <div style="font-size: 11.5px; color: var(--text-dim);">Select which week day schedule to follow today:</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <select id="saturdayOrderDropdown" style="background: var(--bg-1); color: var(--text); border: 1px solid var(--border-hi); padding: 7px 14px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+          ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => `<option value="${d}" ${d === activeDay ? 'selected' : ''}>${d} Order</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  ` : `
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--text-dim); margin-bottom: 14px;">
+      Today: <b style="color: var(--cyan);">${activeDay}</b> (Auto-Detected Schedule)
+    </div>
+  `;
+
   el.innerHTML = `
     <div class="eyebrow">${getDeptShort()} · Year ${state.year} · Staff: ${state.currentStaff || 'Faculty'}</div>
-    <h1 class="title">${activeDay === todayInfo().dayName ? "Today's" : activeDay + "'s"} Class Attendance</h1>
-    <p class="lede">${isFallbackDay ? 'Showing periods for attendance.' : 'Select a period to mark students present/absent/OD.'}</p>
+    <h1 class="title">${isSaturday ? `Saturday (${activeDay} Order)` : `${activeDay}'s Class Attendance`}</h1>
+    <p class="lede">Date: <b style="color:var(--text);">${dateStr}</b> · Select a period to mark students.</p>
+    
+    ${saturdayBoxHtml}
+
     <div class="panel">
-      <div class="day-tabs" id="dayTabs">
-        ${DAYS.map(d => `<button class="day-tab ${d === activeDay ? 'active' : ''}" data-day="${d}">${d}</button>`).join('')}
-      </div>
+      ${!isSaturday ? `
+        <div class="day-tabs" id="dayTabs">
+          ${DAYS.map(d => `<button class="day-tab ${d === activeDay ? 'active' : ''}" data-day="${d}">${d}</button>`).join('')}
+        </div>
+      ` : ''}
+
       <div class="period-tabs" id="periodTabs">
         ${periods.map((p, i) => `
           <button class="period-tab ${i === currentIdx ? 'active' : ''} ${!(p.subject || '').trim() ? 'free' : ''}" data-idx="${i}">
@@ -1030,9 +1001,20 @@ async function buildAttendanceUI(el, tt, classStudents, activeDay, dateStr, isFa
     </div>
   `;
 
-  [...el.querySelectorAll('.day-tab')].forEach(btn => {
-    btn.onclick = () => buildAttendanceUI(el, tt, classStudents, btn.dataset.day, dateStr, false);
-  });
+  if (isSaturday) {
+    const sel = document.getElementById('saturdayOrderDropdown');
+    if (sel) {
+      sel.onchange = (e) => {
+        state.saturdayDayOrder = e.target.value;
+        buildAttendanceUI(el, tt, classStudents, state.saturdayDayOrder, dateStr, true);
+        showToast(`Switched to ${state.saturdayDayOrder} Order for today's attendance`);
+      };
+    }
+  } else {
+    [...el.querySelectorAll('.day-tab')].forEach(btn => {
+      btn.onclick = () => buildAttendanceUI(el, tt, classStudents, btn.dataset.day, dateStr, false);
+    });
+  }
 
   const periodBtns = [...el.querySelectorAll('.period-tab')];
   periodBtns.forEach(btn => {
@@ -1193,8 +1175,7 @@ function renderTimetableView(el) {
           <div class="tt-cell tt-head">Day</div>
           ${PERIOD_TIMES.map((t, i) => `<div class="tt-cell tt-time">P${i + 1}<br>${t}</div>`).join('')}
           ${(data || emptyTimetable()).map(d => `
-            <div class="tt-cell tt-head">${d.day}</div>
-            ${d.periods.map(p => `
+            <div class="tt-cell tt-head">${d.day}</div>${d.periods.map(p => `
               <div class="tt-cell tt-slot ${(p.subject || '').trim() ? '' : 'empty'}">
                 <div class="subj">${(p.subject || '').trim() || 'Free'}</div>
                 ${(p.subject || '').trim() ? `<div class="staff"><span>${(p.staff || '').trim() || 'Unassigned'}</span></div>` : ''}
@@ -1215,7 +1196,6 @@ function renderAdmin(el) {
     <h1 class="title">Academic Management & Schedules</h1>
     <p class="lede">Manage timetable slots, uploaded PDFs, and department-wise student lists.</p>
     
-    <!-- Admin Dept Switcher Tabs -->
     <div class="day-tabs" style="margin-bottom: 20px;">
       <button class="day-tab ${state.dept === 'aids' ? 'active' : ''}" id="adminDeptAidsBtn">🤖 AI & DS Department</button>
       <button class="day-tab ${state.dept === 'it' ? 'active' : ''}" id="adminDeptItBtn">💻 IT Department</button>
@@ -1261,12 +1241,14 @@ function renderAdmin(el) {
     if (stList && stList.length > 0) statusText.push(`${stList.length} Students Added`);
     if (stPdf) statusText.push('Student PDF Attached');
 
-    if (statusText.length > 0) {
-      s.textContent = `● ${statusText.join(' · ')}`;
-      s.className = 'admin-status status-live';
-    } else {
-      s.textContent = '○ Not configured yet (No students/timetable)';
-      s.className = 'admin-status status-pending';
+    if (s) {
+      if (statusText.length > 0) {
+        s.textContent = `● ${statusText.join(' · ')}`;
+        s.className = 'admin-status status-live';
+      } else {
+        s.textContent = '○ Not configured yet (No students/timetable)';
+        s.className = 'admin-status status-pending';
+      }
     }
   });
 
@@ -1317,8 +1299,7 @@ function renderUpload(el, prefill) {
           <div></div>
           ${Array.from({ length: NUM_PERIODS }, (_, i) => `<div class="form-head">P${i + 1}<br><span style="font-size:9px; color:var(--text-dimmer);">${PERIOD_TIMES[i]}</span></div>`).join('')}
           ${data.map((d, di) => `
-            <div class="form-day">${d.day}</div>
-            ${d.periods.map((p, pi) => `
+            <div class="form-day">${d.day}</div>${d.periods.map((p, pi) => `
               <div class="form-cell">
                 <input type="text" placeholder="Subject" value="${(p.subject || '').replace(/"/g, '&quot;')}" data-d="${di}" data-p="${pi}" data-f="subject">
                 <input type="text" placeholder="Staff Name" value="${(p.staff || '').replace(/"/g, '&quot;')}" data-d="${di}" data-p="${pi}" data-f="staff">
@@ -1342,7 +1323,6 @@ function renderUpload(el, prefill) {
       if (pdfFileInput.files[0]) document.getElementById('pdfSelectedName').textContent = `Ready: ${pdfFileInput.files[0].name}`;
     };
 
-    // Auto-parse integration: updates grid slots immediately upon upload
     document.getElementById('uploadPdfBtn').onclick = async () => {
       const file = pdfFileInput.files[0];
       if (!file) return showToast('Please select a PDF file first!');
@@ -1405,7 +1385,6 @@ async function renderManageStudents(el) {
         </div>
       </div>
 
-      <!-- 1. UPLOAD STUDENT LIST PDF -->
       <div class="panel" style="margin-bottom: 20px;">
         <div class="panel-head">
           <div style="font-weight:600;">📑 Step 1: Upload Student Namelist PDF (Optional)</div>
@@ -1421,7 +1400,6 @@ async function renderManageStudents(el) {
         </div>
       </div>
 
-      <!-- 2. ADD STUDENT (SINGLE & BULK) -->
       <div class="panel" style="margin-bottom: 20px;">
         <div class="panel-head"><div style="font-weight:600;">➕ Step 2: Add Students (Manual / Bulk Paste)</div></div>
         
@@ -1447,7 +1425,6 @@ async function renderManageStudents(el) {
         </details>
       </div>
 
-      <!-- 3. STUDENT LIST TABLE -->
       <div class="panel">
         <div class="panel-head">
           <div style="font-weight:600;">👥 Current Enrolled Students (${studentList.length})</div>
@@ -1572,7 +1549,7 @@ function renderStudents(el) {
           <div class="empty-state">
             <div class="glyph">👥</div>
             <h3>No Students Enrolled</h3>
-            <p>Admin has not configured students for ${getDeptShort()} Year ${state.year} yet.</p>
+            <p>Admin has not configured students for ${getDeptShort()} Year${state.year} yet.</p>
           </div>
         ` : `
           <div class="student-grid">

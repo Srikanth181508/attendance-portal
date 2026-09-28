@@ -8,6 +8,7 @@ const cors = require('cors');
 const mysql = require('mysql2/promise');
 const { Resend } = require('resend');
 const pdfParse = require('pdf-parse');
+const ExcelJS = require('exceljs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -360,7 +361,6 @@ app.post(['/api/timetable/:year', '/api/timetable/:year/'], async (req, res) => 
   }
 });
 
-// Auto-Parse & Auto-Save Timetable PDF Endpoint
 app.post(['/api/timetable/pdf/:year', '/api/timetable/pdf/:year/'], (req, res) => {
   upload.single('pdf')(req, res, async (err) => {
     if (err) {
@@ -565,7 +565,7 @@ app.post(['/api/attendance/:year', '/api/attendance/:year/'], async (req, res) =
 });
 
 // ==========================================
-// 9. Class Advisor Endpoints
+// 9. Class Advisor Endpoints (Daily & Cumulative)
 // ==========================================
 app.get(['/api/advisor/daily/:year', '/api/advisor/daily/:year/'], async (req, res) => {
   try {
@@ -587,7 +587,7 @@ app.get(['/api/advisor/daily/:year', '/api/advisor/daily/:year/'], async (req, r
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// Dual Endpoint: Cumulative & Monthly-Summary
+// Dual Endpoint: Cumulative & Monthly-Summary JSON
 app.get([
   '/api/attendance/cumulative/:year', 
   '/api/attendance/cumulative/:year/',
@@ -648,7 +648,6 @@ app.get([
         let rawStatus = typeof item === 'object' ? (item.status || item.attendance || '') : item;
         rawStatus = (rawStatus || '').toString().trim().toUpperCase();
 
-        // 1. Period-wise calculation
         if (!studentStats[name]) {
           studentStats[name] = { present: 0, absent: 0, od: 0, total: 0 };
         }
@@ -657,7 +656,6 @@ app.get([
         else if (rawStatus === 'ABSENT' || rawStatus === 'A') studentStats[name].absent += 1;
         else if (rawStatus === 'OD' || rawStatus === 'ON DUTY' || rawStatus === 'ONDUTY') studentStats[name].od += 1;
 
-        // 2. Day-wise calculation
         if (!studentDays[name]) studentDays[name] = {};
         if (!studentDays[name][date]) studentDays[name][date] = { attended: 0, total: 0 };
         studentDays[name][date].total += 1;
@@ -682,7 +680,6 @@ app.get([
       });
       const daysAbsent = Math.max(0, totalWorkingDays - daysPresent);
 
-      // Percentage calculation based on working days
       const percentage = totalWorkingDays > 0 
         ? ((daysPresent / totalWorkingDays) * 100).toFixed(2) 
         : (stats.total > 0 ? ((attendedPeriods / stats.total) * 100).toFixed(2) : '0.00');
@@ -719,7 +716,283 @@ app.get([
 });
 
 // ==========================================
-// 10. Static Files & Root Route
+// 10. Direct Excel (.xlsx) Export Endpoints
+// ==========================================
+
+// A. Daily Excel Export Endpoint
+app.get(['/api/attendance/export-daily/:year', '/api/attendance/export-daily/:year/'], async (req, res) => {
+  try {
+    const yearKey = getYearKey(req.params.year);
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+
+    // 1. Fetch enrolled students
+    const [stRows] = await db.query('SELECT students_data FROM year_students WHERE year_key = ?', [yearKey]);
+    let studentList = [];
+    if (stRows.length > 0) {
+      let d = stRows[0].students_data;
+      while (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { break; } }
+      studentList = Array.isArray(d) ? d : [];
+    }
+
+    // 2. Fetch daily attendance
+    const [attRows] = await db.query(
+      `SELECT period_idx, payload FROM attendance_records WHERE year_key = ? AND date_str = ? ORDER BY period_idx ASC`,
+      [yearKey, date]
+    );
+
+    const periodMap = {};
+    attRows.forEach(r => {
+      let p = r.payload;
+      while (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { break; } }
+      let recs = p.records || p;
+      periodMap[`P${r.period_idx}`] = recs || {};
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Daily_${date}`);
+
+    const display = getDisplayTitle(yearKey);
+
+    worksheet.mergeCells('A1:I1');
+    worksheet.getCell('A1').value = `${display.dept} - ${display.year} - Daily Attendance Report`;
+    worksheet.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    worksheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+
+    worksheet.mergeCells('A2:I2');
+    worksheet.getCell('A2').value = `Date: ${date}`;
+    worksheet.getCell('A2').font = { bold: true, size: 11 };
+    worksheet.getCell('A2').alignment = { horizontal: 'center' };
+
+    worksheet.addRow([]);
+
+    const headerRow = worksheet.addRow(['Sl', 'Student Name', 'Reg No', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6']);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+
+    worksheet.columns = [
+      { key: 'sl', width: 6 },
+      { key: 'name', width: 26 },
+      { key: 'reg', width: 18 },
+      { key: 'p1', width: 12 },
+      { key: 'p2', width: 12 },
+      { key: 'p3', width: 12 },
+      { key: 'p4', width: 12 },
+      { key: 'p5', width: 12 },
+      { key: 'p6', width: 12 }
+    ];
+
+    studentList.forEach((st, idx) => {
+      const getPeriodStatus = (pNum) => {
+        const pObj = periodMap[`P${pNum}`] || {};
+        const val = pObj[st.reg] || pObj[st.name];
+        if (!val) return '-';
+        const raw = typeof val === 'object' ? (val.status || '-') : val;
+        return String(raw).toUpperCase();
+      };
+
+      const row = worksheet.addRow([
+        idx + 1,
+        st.name,
+        st.reg,
+        getPeriodStatus(1),
+        getPeriodStatus(2),
+        getPeriodStatus(3),
+        getPeriodStatus(4),
+        getPeriodStatus(5),
+        getPeriodStatus(6)
+      ]);
+
+      row.eachCell((cell, colNum) => {
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        if (colNum >= 4) {
+          cell.alignment = { horizontal: 'center' };
+          const txt = cell.value;
+          if (txt === 'PRESENT' || txt === 'P') {
+            cell.font = { color: { argb: 'FF16A34A' }, bold: true };
+          } else if (txt === 'ABSENT' || txt === 'A') {
+            cell.font = { color: { argb: 'FFDC2626' }, bold: true };
+          } else if (txt === 'OD') {
+            cell.font = { color: { argb: 'FFEA580C' }, bold: true };
+          }
+        }
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${display.deptShort}_${display.year.replace(/\s+/g, '')}_Daily_${date}.xlsx`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Daily Excel Export Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// B. Monthly Cumulative Excel Export Endpoint
+app.get(['/api/attendance/export-monthly/:year', '/api/attendance/export-monthly/:year/'], async (req, res) => {
+  try {
+    const yearKey = getYearKey(req.params.year);
+    const monthVal = req.query.month || new Date().toISOString().slice(0, 7);
+    const [fullYear, month] = monthVal.split('-');
+
+    const [rows] = await db.query(
+      `SELECT date_str, period_idx, payload FROM attendance_records WHERE year_key = ? AND date_str LIKE ? ORDER BY date_str ASC, period_idx ASC`,
+      [yearKey, `${monthVal}%`]
+    );
+
+    const [stRows] = await db.query('SELECT students_data FROM year_students WHERE year_key = ?', [yearKey]);
+    let studentList = [];
+    if (stRows.length > 0) {
+      let d = stRows[0].students_data;
+      while (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { break; } }
+      studentList = Array.isArray(d) ? d : [];
+    }
+
+    const uniqueDates = [...new Set(rows.map(r => r.date_str))];
+    const totalWorkingDays = uniqueDates.length;
+
+    const studentStats = {};
+    const studentDays = {};
+
+    rows.forEach(row => {
+      const date = row.date_str;
+      let data = row.payload;
+      while (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { break; } }
+
+      let recordsList = [];
+      if (Array.isArray(data)) recordsList = data;
+      else if (data && typeof data === 'object') {
+        if (Array.isArray(data.students)) recordsList = data.students;
+        else if (Array.isArray(data.records)) recordsList = data.records;
+        else if (data.records && typeof data.records === 'object') {
+          Object.keys(data.records).forEach(k => recordsList.push({ regNo: k, name: k, status: data.records[k] }));
+        }
+      }
+
+      recordsList.forEach(item => {
+        if (!item) return;
+        const reg = item.regNo || item.student_id || item.name;
+        if (!reg) return;
+
+        let rawStatus = typeof item === 'object' ? (item.status || item.attendance || '') : item;
+        rawStatus = (rawStatus || '').toString().trim().toUpperCase();
+
+        if (!studentStats[reg]) studentStats[reg] = { present: 0, absent: 0, od: 0, total: 0 };
+        studentStats[reg].total += 1;
+        if (rawStatus === 'PRESENT' || rawStatus === 'P') studentStats[reg].present += 1;
+        else if (rawStatus === 'ABSENT' || rawStatus === 'A') studentStats[reg].absent += 1;
+        else if (rawStatus === 'OD' || rawStatus === 'ON DUTY') studentStats[reg].od += 1;
+
+        if (!studentDays[reg]) studentDays[reg] = {};
+        if (!studentDays[reg][date]) studentDays[reg][date] = { attended: 0, total: 0 };
+        studentDays[reg][date].total += 1;
+        if (rawStatus === 'PRESENT' || rawStatus === 'P' || rawStatus === 'OD' || rawStatus === 'ON DUTY') {
+          studentDays[reg][date].attended += 1;
+        }
+      });
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Monthly_${monthVal}`);
+    const display = getDisplayTitle(yearKey);
+
+    worksheet.mergeCells('A1:I1');
+    worksheet.getCell('A1').value = `${display.dept} - ${display.year} - Monthly Cumulative Attendance`;
+    worksheet.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    worksheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+
+    worksheet.mergeCells('A2:I2');
+    worksheet.getCell('A2').value = `Month: ${monthVal} | Total Working Days: ${totalWorkingDays}`;
+    worksheet.getCell('A2').font = { bold: true, size: 11 };
+    worksheet.getCell('A2').alignment = { horizontal: 'center' };
+
+    worksheet.addRow([]);
+
+    const headerRow = worksheet.addRow(['Sl', 'Student Name', 'Reg No', 'Total Hours', 'Present', 'OD', 'Absent', 'Cumulative %', 'Eligibility (<75%)']);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+
+    worksheet.columns = [
+      { key: 'sl', width: 6 },
+      { key: 'name', width: 25 },
+      { key: 'reg', width: 18 },
+      { key: 'total', width: 14 },
+      { key: 'present', width: 10 },
+      { key: 'od', width: 10 },
+      { key: 'absent', width: 10 },
+      { key: 'percentage', width: 16 },
+      { key: 'status', width: 20 }
+    ];
+
+    studentList.forEach((st, idx) => {
+      const stats = studentStats[st.reg] || studentStats[st.name] || { present: 0, absent: 0, od: 0, total: 0 };
+      const reg = st.reg;
+
+      let daysPresent = 0;
+      uniqueDates.forEach(date => {
+        const dayRecord = studentDays[reg] ? studentDays[reg][date] : null;
+        if (dayRecord && dayRecord.total > 0) {
+          const ratio = dayRecord.attended / dayRecord.total;
+          if (ratio >= 0.5) daysPresent += 1;
+          else if (ratio > 0) daysPresent += 0.5;
+        }
+      });
+
+      const percentage = totalWorkingDays > 0 
+        ? ((daysPresent / totalWorkingDays) * 100).toFixed(2) 
+        : (stats.total > 0 ? (((stats.present + stats.od) / stats.total) * 100).toFixed(2) : '0.00');
+
+      const isShortage = parseFloat(percentage) < 75.0;
+
+      const row = worksheet.addRow([
+        idx + 1,
+        st.name,
+        st.reg,
+        stats.total,
+        stats.present,
+        stats.od,
+        stats.absent,
+        `${percentage}%`,
+        isShortage ? 'Shortage (<75%)' : 'Eligible'
+      ]);
+
+      row.eachCell((cell, colNum) => {
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        if (colNum >= 4) cell.alignment = { horizontal: 'center' };
+
+        if (colNum === 8 || colNum === 9) {
+          if (isShortage) {
+            cell.font = { color: { argb: 'FFDC2626' }, bold: true };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFECEC' } };
+          } else {
+            cell.font = { color: { argb: 'FF16A34A' }, bold: true };
+          }
+        }
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${display.deptShort}_${display.year.replace(/\s+/g, '')}_Monthly_${monthVal}.xlsx`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Monthly Excel Export Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 11. Static Files & Root Route
 // ==========================================
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
